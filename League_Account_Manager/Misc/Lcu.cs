@@ -332,7 +332,7 @@ internal class Lcu
         return true;
     }
 
-    private static void SetClientHeaders(HttpClient client, string port, byte[] token, string version)
+    internal static void SetClientHeaders(HttpClient client, string port, byte[] token, string? version)
     {
         client.DefaultRequestHeaders.Add("Host", "127.0.0.1:" + port);
         client.DefaultRequestHeaders.Add("Connection", "keep-alive");
@@ -341,8 +341,13 @@ internal class Lcu
         client.DefaultRequestHeaders.Add("Access-Control-Allow-Credentials", "true");
         client.DefaultRequestHeaders.Add("Access-Control-Allow-Origin", "127.0.0.1");
         client.DefaultRequestHeaders.Add("Origin", "127.0.0.1:" + port);
+        // Lockfile discovery can succeed while reading the executable version fails.
+        // A product without a version is valid HTTP; a trailing slash is not.
+        var riotProduct = ProductHeaderValue.TryParse($"RiotClient/{version?.Trim()}", out var product)
+            ? product.ToString()
+            : "RiotClient";
         client.DefaultRequestHeaders.Add("User-Agent",
-            $"Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) RiotClient/{version} (CEF 74) Safari/537.36");
+            $"Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) {riotProduct} (CEF 74) Safari/537.36");
         client.DefaultRequestHeaders.Add("X-Riot-Source", "127.0.0.1:" + port);
         client.DefaultRequestHeaders.Add("sec-ch-ua", "Chromium");
         client.DefaultRequestHeaders.Add("Sec-Fetch-User", "?F");

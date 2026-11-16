@@ -2049,10 +2049,12 @@ public partial class Accounts : Page
 
                 await Task.Delay(200, cancellationToken);
                 num++;
-                if (num == 80) return false;
+                if (num == 300) return false;
             }
             MarkTaskCompleted("Start Riot client");
 
+            SetAccountOperationStatus("Preparing Riot sign-in...");
+            await RiotNativeLogin.SignOutRememberedSessionAsync(cancellationToken);
             var controlDiscovery = Stopwatch.StartNew();
             var credentialsSubmitted = false;
             while (true)
@@ -2060,17 +2062,34 @@ public partial class Accounts : Page
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     // Some Riot CEF builds expose no sign-in accessibility tree. Retrying
-                    // element discovery forever cannot recover it. Use the supported RSO
-                    // flow, but never restart an attempt that has already submitted credentials.
+                    // element discovery forever cannot recover it. Keep native sign-in selected
+                    // and report the failure instead of switching to embedded verification.
                     if (!credentialsSubmitted && controlDiscovery.Elapsed >= TimeSpan.FromSeconds(15))
                     {
-                        DebugConsole.WriteLine("[Accounts] Legacy login controls unavailable; switching to RSO login.");
-                        SetAccountOperationStatus("Login controls unavailable. Trying alternate sign-in...");
-                        return await LoginRsoAsync(loginButtonName, persistLogin, cancellationToken);
+                        Notif.notificationManager.Show("Login",
+                            "Riot sign-in controls are unavailable. Complete sign-in in the Riot Client window.",
+                            NotificationType.Error);
+                        return false;
                     }
                     var restartLogin = false;
                     var cancelLogin = false;
-                    var app = Application.Attach(riotval);
+                    // Electron has several processes with this name; only the window
+                    // owner exposes the sign-in controls. Never attach to an arbitrary renderer.
+                    var windowProcessId = 0;
+                    foreach (var process in Process.GetProcessesByName(riotval))
+                    {
+                        using (process)
+                        {
+                            try
+                            {
+                                if (process.MainWindowHandle != IntPtr.Zero)
+                                    windowProcessId = process.Id;
+                            }
+                            catch (InvalidOperationException) { }
+                        }
+                    }
+                    if (windowProcessId == 0) throw new Exception("Riot login window is not ready");
+                    var app = Application.Attach(windowProcessId);
 
                     using (var automation = new UIA3Automation())
                     {
@@ -2081,6 +2100,11 @@ public partial class Accounts : Page
                             throw new Exception("Riot window not found");
                         }
 
+                        if (window.Patterns.Window.IsSupported &&
+                            window.Patterns.Window.Pattern.WindowVisualState.Value == WindowVisualState.Minimized)
+                            window.Patterns.Window.Pattern.SetWindowVisualState(WindowVisualState.Normal);
+                        window.Focus();
+                        RiotAccessibility.Enable(window.Properties.NativeWindowHandle.Value);
                         var riotcontent = FindLegacyLoginContent(window);
                         if (riotcontent == null)
                         {

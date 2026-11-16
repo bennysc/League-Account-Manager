@@ -1027,7 +1027,7 @@ public partial class ValorantAccounts : Page
 
                 await Task.Delay(200);
                 num++;
-                if (num == 80)
+                if (num == 300)
                 {
                     DebugConsole.WriteLine("[ValorantAccounts] Timed out waiting for Riot client process",
                         ConsoleColor.Yellow);
@@ -1040,6 +1040,8 @@ public partial class ValorantAccounts : Page
             SetLoginStatus("Finding login controls...");
 
             var loginAttempts = 0;
+            SetLoginStatus("Preparing Riot sign-in...");
+            await RiotNativeLogin.SignOutRememberedSessionAsync();
             var controlDiscovery = Stopwatch.StartNew();
             var credentialsSubmitted = false;
 
@@ -1048,15 +1050,30 @@ public partial class ValorantAccounts : Page
                 {
                     if (!credentialsSubmitted && controlDiscovery.Elapsed >= TimeSpan.FromSeconds(15))
                     {
-                        DebugConsole.WriteLine("[ValorantAccounts] Legacy login controls unavailable; switching to clientless login.");
-                        SetLoginStatus("Login controls unavailable. Trying alternate sign-in...");
-                        Utils.KillLeagueFunc();
-                        await LoginClientlessAsync(clickedButton.Name == "StealthLogin", persist);
+                        Notif.notificationManager.Show("Login",
+                            "Riot sign-in controls are unavailable. Complete sign-in in the Riot Client window.",
+                            NotificationType.Error);
                         return;
                     }
                     var restartLogin = false;
                     var cancelLogin = false;
-                    var app = Application.Attach(riotval);
+                    // Electron has several processes with this name; only the window
+                    // owner exposes the sign-in controls. Never attach to an arbitrary renderer.
+                    var windowProcessId = 0;
+                    foreach (var process in Process.GetProcessesByName(riotval))
+                    {
+                        using (process)
+                        {
+                            try
+                            {
+                                if (process.MainWindowHandle != IntPtr.Zero)
+                                    windowProcessId = process.Id;
+                            }
+                            catch (InvalidOperationException) { }
+                        }
+                    }
+                    if (windowProcessId == 0) throw new Exception("Riot login window is not ready");
+                    var app = Application.Attach(windowProcessId);
 
                     using (var automation = new UIA3Automation())
                     {
@@ -1067,6 +1084,11 @@ public partial class ValorantAccounts : Page
                             throw new Exception("Riot window not found");
                         }
 
+                        if (window.Patterns.Window.IsSupported &&
+                            window.Patterns.Window.Pattern.WindowVisualState.Value == WindowVisualState.Minimized)
+                            window.Patterns.Window.Pattern.SetWindowVisualState(WindowVisualState.Normal);
+                        window.Focus();
+                        RiotAccessibility.Enable(window.Properties.NativeWindowHandle.Value);
                         var riotcontent = FindLegacyLoginContent(window);
                         if (riotcontent == null)
                         {
