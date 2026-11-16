@@ -3453,6 +3453,7 @@ public partial class Accounts : Page
             DebugConsole.WriteLine("[Accounts][GenerateToken] Starting clientless RSO flow");
             var challenge = await RsoLoginService.ClientlessStartSessionAsync(remember: persist ?? false);
             RsoLoginService.AuthResult result;
+            var challengeRetries = new ChallengeRetryPolicy();
             while (true)
             {
                 var captchaToken = string.Empty;
@@ -3482,6 +3483,14 @@ public partial class Accounts : Page
                     SelectedUsername!, SelectedPassword!, remember: persist ?? false, captchaToken);
                 if (!result.NeedsAnotherChallenge)
                     break;
+
+                if (!challengeRetries.TryRetry())
+                {
+                    DebugConsole.WriteLine("Repeated challenge rejected; ending authentication attempt.", ConsoleColor.Yellow);
+                    Notif.notificationManager.Show("Login", ChallengeRetryPolicy.ExhaustedMessage,
+                        NotificationType.Error);
+                    return;
+                }
 
                 DebugConsole.WriteLine(
                     "[Accounts][GenerateToken] Challenge rejected. Solving the replacement challenge.",
@@ -3609,6 +3618,7 @@ public partial class Accounts : Page
             var challenge = await RsoLoginService.ClientlessStartSessionAsync(remember: persist ?? false,
                 cancellationToken);
             RsoLoginService.AuthResult result;
+            var challengeRetries = new ChallengeRetryPolicy();
             var credentialsSubmitted = false;
             while (true)
             {
@@ -3651,6 +3661,14 @@ public partial class Accounts : Page
                 credentialsSubmitted = true;
                 if (!result.NeedsAnotherChallenge)
                     break;
+
+                if (!challengeRetries.TryRetry())
+                {
+                    DebugConsole.WriteLine("Repeated challenge rejected; ending authentication attempt.", ConsoleColor.Yellow);
+                    Notif.notificationManager.Show("Login", ChallengeRetryPolicy.ExhaustedMessage,
+                        NotificationType.Error);
+                    return false;
+                }
 
                 DebugConsole.WriteLine(
                     "[Accounts][RsoLogin] Challenge rejected. Solving the replacement challenge.",

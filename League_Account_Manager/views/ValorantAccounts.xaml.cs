@@ -714,6 +714,7 @@ public partial class ValorantAccounts : Page
             var challenge = await RsoLoginService.ClientlessStartSessionAsync(remember: persist ?? false,
                 "valorant");
             RsoLoginService.AuthResult result;
+            var challengeRetries = new ChallengeRetryPolicy();
             var credentialsSubmitted = false;
             while (true)
             {
@@ -748,6 +749,14 @@ public partial class ValorantAccounts : Page
                 credentialsSubmitted = true;
                 if (!result.NeedsAnotherChallenge)
                     break;
+
+                if (!challengeRetries.TryRetry())
+                {
+                    DebugConsole.WriteLine("Repeated challenge rejected; ending authentication attempt.", ConsoleColor.Yellow);
+                    Notif.notificationManager.Show("Login", ChallengeRetryPolicy.ExhaustedMessage,
+                        NotificationType.Error);
+                    return;
+                }
 
                 DebugConsole.WriteLine(
                     "[ValorantAccounts][RsoLogin] Challenge rejected. Solving the replacement challenge.",
@@ -2362,6 +2371,7 @@ public partial class ValorantAccounts : Page
             var challenge = await RsoLoginService.ClientlessStartSessionAsync(remember: persist ?? false,
                 "valorant");
             RsoLoginService.AuthResult result;
+            var challengeRetries = new ChallengeRetryPolicy();
             while (true)
             {
                 var captchaToken = string.Empty;
@@ -2391,6 +2401,14 @@ public partial class ValorantAccounts : Page
                     SelectedUsername!, SelectedPassword!, remember: persist ?? false, captchaToken);
                 if (!result.NeedsAnotherChallenge)
                     break;
+
+                if (!challengeRetries.TryRetry())
+                {
+                    DebugConsole.WriteLine("Repeated challenge rejected; ending authentication attempt.", ConsoleColor.Yellow);
+                    Notif.notificationManager.Show("Login", ChallengeRetryPolicy.ExhaustedMessage,
+                        NotificationType.Error);
+                    return;
+                }
 
                 DebugConsole.WriteLine(
                     "[Accounts][GenerateToken] Challenge rejected. Solving the replacement challenge.",
