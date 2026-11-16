@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
@@ -2053,10 +2053,21 @@ public partial class Accounts : Page
             }
             MarkTaskCompleted("Start Riot client");
 
+            var controlDiscovery = Stopwatch.StartNew();
+            var credentialsSubmitted = false;
             while (true)
                 try
                 {
                     cancellationToken.ThrowIfCancellationRequested();
+                    // Some Riot CEF builds expose no sign-in accessibility tree. Retrying
+                    // element discovery forever cannot recover it. Use the supported RSO
+                    // flow, but never restart an attempt that has already submitted credentials.
+                    if (!credentialsSubmitted && controlDiscovery.Elapsed >= TimeSpan.FromSeconds(15))
+                    {
+                        DebugConsole.WriteLine("[Accounts] Legacy login controls unavailable; switching to RSO login.");
+                        SetAccountOperationStatus("Login controls unavailable. Trying alternate sign-in...");
+                        return await LoginRsoAsync(loginButtonName, persistLogin, cancellationToken);
+                    }
                     var restartLogin = false;
                     var cancelLogin = false;
                     var app = Application.Attach(riotval);
@@ -2114,6 +2125,7 @@ public partial class Accounts : Page
                                 await Task.Delay(200, cancellationToken);
                             }
                             ActivateLegacySignIn(signInElement);
+                            credentialsSubmitted = true;
                             MarkTaskCompleted("Submit credentials");
 
                             // brief pause to allow any login error tooltip to appear

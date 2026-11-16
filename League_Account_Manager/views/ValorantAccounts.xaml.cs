@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
@@ -1031,10 +1031,20 @@ public partial class ValorantAccounts : Page
             SetLoginStatus("Finding login controls...");
 
             var loginAttempts = 0;
+            var controlDiscovery = Stopwatch.StartNew();
+            var credentialsSubmitted = false;
 
             while (true)
                 try
                 {
+                    if (!credentialsSubmitted && controlDiscovery.Elapsed >= TimeSpan.FromSeconds(15))
+                    {
+                        DebugConsole.WriteLine("[ValorantAccounts] Legacy login controls unavailable; switching to clientless login.");
+                        SetLoginStatus("Login controls unavailable. Trying alternate sign-in...");
+                        Utils.KillLeagueFunc();
+                        await LoginClientlessAsync(clickedButton.Name == "StealthLogin", persist);
+                        return;
+                    }
                     var restartLogin = false;
                     var cancelLogin = false;
                     var app = Application.Attach(riotval);
@@ -1089,6 +1099,7 @@ public partial class ValorantAccounts : Page
                             DebugConsole.WriteLine("[ValorantAccounts] Sign-in button enabled, submitting login");
                             SetLoginStatus("Submitting credentials...");
                             ActivateLegacySignIn(signInElement);
+                            credentialsSubmitted = true;
                             MarkLoginStepCompleted("Submit credentials");
                             SetLoginStatus("Waiting for Riot authentication...");
 
