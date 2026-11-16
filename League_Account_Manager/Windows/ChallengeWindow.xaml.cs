@@ -1,4 +1,4 @@
-using System.Drawing;
+﻿using System.Drawing;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
@@ -186,7 +186,8 @@ public partial class ChallengeWindow : Window
             // The page has to report a solved token, but window.chrome.webview only exists in
             // WebView2. Keep that object out of the document and let the page call a plain function.
             await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
-                "window.__lamReport=function(message){window.chrome.webview.postMessage(message);};" +
+                "const lamPostMessage=window.chrome.webview.postMessage.bind(window.chrome.webview);" +
+                "window.__lamReport=function(message){lamPostMessage(message);};" +
                 "try{delete window.chrome.webview;}catch(e){}");
             // Setting UserAgent clears Sec-CH-UA and navigator.userAgentData. Chrome 150 still
             // reports a Chromium brand there, so restore that instead of leaving Edge's data empty.
